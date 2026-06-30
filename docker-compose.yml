@@ -1,0 +1,16 @@
+version: "3.8"
+
+services:
+  ytdlp-api:
+    build: .
+    container_name: ytdlp-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - YT_COOKIES_B64=${YT_COOKIES_B64}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/debug/cookies"]
+      interval: 60s
+      timeout: 10s
+      retries: 3

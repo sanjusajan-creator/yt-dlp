@@ -3,6 +3,7 @@ from fastapi.responses import StreamingResponse
 from ytmusicapi import YTMusic
 from app.utils.audio_extractor import get_audio_url
 import httpx
+import asyncio
 
 router = APIRouter()
 ytmusic = YTMusic()
@@ -51,17 +52,17 @@ def fetch_audio_url(video_id: str = Query(..., description="YouTube video ID")):
 
 
 @router.get("/audio/stream")
-def stream_audio(video_id: str = Query(..., description="YouTube video ID")):
+async def stream_audio(video_id: str = Query(..., description="YouTube video ID")):
     """Proxy audio through the server to bypass YouTube IP restrictions."""
     try:
         audio_url = get_audio_url(video_id)
     except Exception as e:
         return {"error": f"Failed to extract audio URL: {str(e)}"}
 
-    def iter_audio():
-        with httpx.Client(timeout=30) as client:
-            with client.stream("GET", audio_url) as resp:
-                for chunk in resp.iter_bytes(chunk_size=65536):
+    async def iter_audio():
+        async with httpx.AsyncClient(timeout=60) as client:
+            async with client.stream("GET", audio_url) as resp:
+                async for chunk in resp.aiter_bytes(chunk_size=65536):
                     yield chunk
 
     return StreamingResponse(
