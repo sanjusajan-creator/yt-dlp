@@ -13,8 +13,8 @@ HEADERS = {
 # tv = DRM protected, web = needs PO token, so use web_embedded which is less restricted
 PLAYER_CLIENTS = ["web_embedded", "web", "mweb"]
 
-COOKIES_RAW = os.environ.get("YOUTUBE_COOKIES", "")
-COOKIES_B64 = os.environ.get("YOUTUBE_COOKIES_B64", "")
+COOKIES_RAW = os.environ.get("YT_COOKIES", "")
+COOKIES_B64 = os.environ.get("YT_COOKIES_B64", "")
 _cookies_file = None
 
 
