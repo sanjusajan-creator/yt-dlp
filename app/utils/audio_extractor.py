@@ -1,5 +1,6 @@
 import os
 import json
+import base64
 import tempfile
 from yt_dlp import YoutubeDL
 
@@ -11,8 +12,11 @@ HEADERS = {
 
 PLAYER_CLIENTS = ["tv", "mweb", "web"]
 
-# Load cookies from env var (set YOUTUBE_COOKIES in Vercel dashboard)
+# Supports two env vars:
+#   YOUTUBE_COOKIES      - raw Netscape/JSON cookie content (may lose newlines on Vercel)
+#   YOUTUBE_COOKIES_B64  - base64-encoded cookie content (safe for env vars)
 COOKIES_RAW = os.environ.get("YOUTUBE_COOKIES", "")
+COOKIES_B64 = os.environ.get("YOUTUBE_COOKIES_B64", "")
 _cookies_file = None
 
 
@@ -20,29 +24,48 @@ def _get_cookies_file():
     global _cookies_file
     if _cookies_file and os.path.exists(_cookies_file):
         return _cookies_file
-    if not COOKIES_RAW:
+
+    content = ""
+
+    # Prefer base64 (no newline issues)
+    if COOKIES_B64:
+        try:
+            content = (
+                base64.b64decode(COOKIES_B64).decode("utf-8", errors="replace").strip()
+            )
+        except Exception:
+            pass
+
+    # Fallback to raw
+    if not content and COOKIES_RAW:
+        content = COOKIES_RAW.strip()
+
+    if not content:
         return None
 
-    # Support both Netscape cookie format (raw text) and JSON format
-    content = COOKIES_RAW.strip()
+    # Convert JSON cookie format to Netscape if needed
     if content.startswith("["):
-        # JSON format — convert to Netscape format
-        cookies = json.loads(content)
-        lines = ["# Netscape HTTP Cookie File"]
-        for c in cookies:
-            domain = c.get("domain", "")
-            flag = "TRUE" if domain.startswith(".") else "FALSE"
-            path = c.get("path", "/")
-            secure = "TRUE" if c.get("secure", False) else "FALSE"
-            expires = str(int(c.get("expirationDate", 0)))
-            name = c.get("name", "")
-            value = c.get("value", "")
-            lines.append(
-                f"{domain}\t{flag}\t{path}\t{secure}\t{expires}\t{name}\t{value}"
-            )
-        content = "\n".join(lines)
+        try:
+            cookies = json.loads(content)
+            lines = ["# Netscape HTTP Cookie File"]
+            for c in cookies:
+                domain = c.get("domain", "")
+                flag = "TRUE" if domain.startswith(".") else "FALSE"
+                path = c.get("path", "/")
+                secure = "TRUE" if c.get("secure", False) else "FALSE"
+                expires = str(int(c.get("expirationDate", 0)))
+                name = c.get("name", "")
+                value = c.get("value", "")
+                lines.append(
+                    f"{domain}\t{flag}\t{path}\t{secure}\t{expires}\t{name}\t{value}"
+                )
+            content = "\n".join(lines)
+        except json.JSONDecodeError:
+            pass
 
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".txt", mode="w")
+    tmp = tempfile.NamedTemporaryFile(
+        delete=False, suffix=".txt", mode="w", encoding="utf-8"
+    )
     tmp.write(content)
     tmp.close()
     _cookies_file = tmp.name
@@ -79,7 +102,6 @@ def get_audio_url(video_id: str) -> str:
             last_error = e
             continue
 
-    # Final attempt with default settings
     try:
         url = f"https://www.youtube.com/watch?v={video_id}"
         ydl_opts = {
@@ -98,3 +120,22 @@ def get_audio_url(video_id: str) -> str:
             return info["url"]
     except Exception as e:
         raise last_error or e
+
+
+def cookies_status():
+    """Debug: check if cookies are loaded"""
+    has_raw = bool(COOKIES_RAW)
+    has_b64 = bool(COOKIES_B64)
+    file_path = _get_cookies_file()
+    file_exists = file_path and os.path.exists(file_path)
+    file_lines = 0
+    if file_exists:
+        with open(file_path, "r") as f:
+            file_lines = len(f.readlines())
+    return {
+        "has_raw_env": has_raw,
+        "has_b64_env": has_b64,
+        "cookies_file": file_path,
+        "file_exists": file_exists,
+        "cookie_lines": file_lines,
+    }

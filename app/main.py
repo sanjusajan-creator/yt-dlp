@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Query
 from app.utils.search_and_metadata import search_youtube, fetch_metadata
+from app.utils.audio_extractor import cookies_status
 from app.api import explore  # Import the explore router
 
 app = FastAPI(title="YouTube Song Search API")
@@ -25,12 +26,14 @@ def search_songs(query: str = Query(..., description="Search term like 'lofi chi
             "url": v["link"],
             "thumbnail": v["thumbnails"][0]["url"],
             "views": v.get("viewCount", {}).get("short"),
-            "published": v.get("publishedTime")
+            "published": v.get("publishedTime"),
         }
         for v in results
     ]
 
-    return {
-        "top_result_metadata": first_metadata,
-        "preview_results": preview_list
-    }
+    return {"top_result_metadata": first_metadata, "preview_results": preview_list}
+
+
+@app.get("/debug/cookies")
+def debug_cookies():
+    return cookies_status()
