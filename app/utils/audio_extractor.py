@@ -52,7 +52,7 @@ def _get_cookies_file():
 def _try_extract(video_id: str, player_client: str) -> str:
     url = f"https://www.youtube.com/watch?v={video_id}"
     ydl_opts = {
-        "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
+        "format": "ba/b",
         "quiet": True,
         "skip_download": True,
         "noplaylist": True,
@@ -83,7 +83,7 @@ def get_audio_url(video_id: str) -> str:
     try:
         url = f"https://www.youtube.com/watch?v={video_id}"
         ydl_opts = {
-            "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
+            "format": "ba/b",
             "quiet": True,
             "skip_download": True,
             "noplaylist": True,
