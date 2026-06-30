@@ -10,11 +10,9 @@ HEADERS = {
     "Referer": "https://www.youtube.com/",
 }
 
-PLAYER_CLIENTS = ["tv", "mweb", "web"]
+# tv = DRM protected, web = needs PO token, so use web_embedded which is less restricted
+PLAYER_CLIENTS = ["web_embedded", "web", "mweb"]
 
-# Supports two env vars:
-#   YOUTUBE_COOKIES      - raw Netscape/JSON cookie content (may lose newlines on Vercel)
-#   YOUTUBE_COOKIES_B64  - base64-encoded cookie content (safe for env vars)
 COOKIES_RAW = os.environ.get("YOUTUBE_COOKIES", "")
 COOKIES_B64 = os.environ.get("YOUTUBE_COOKIES_B64", "")
 _cookies_file = None
@@ -27,7 +25,7 @@ def _get_cookies_file():
 
     content = ""
 
-    # Prefer base64 (no newline issues)
+    # Try base64 env var first
     if COOKIES_B64:
         try:
             content = (
@@ -36,14 +34,25 @@ def _get_cookies_file():
         except Exception:
             pass
 
-    # Fallback to raw
+    # Try raw env var
     if not content and COOKIES_RAW:
         content = COOKIES_RAW.strip()
+
+    # Try local cookies.txt file
+    if not content:
+        local_path = os.path.join(
+            os.path.dirname(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            ),
+            "cookies.txt",
+        )
+        if os.path.exists(local_path):
+            with open(local_path, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read().strip()
 
     if not content:
         return None
 
-    # Convert JSON cookie format to Netscape if needed
     if content.startswith("["):
         try:
             cookies = json.loads(content)
@@ -72,23 +81,29 @@ def _get_cookies_file():
     return _cookies_file
 
 
-def _try_extract(video_id: str, player_client: str) -> str:
-    url = f"https://www.youtube.com/watch?v={video_id}"
-    ydl_opts = {
+def _base_opts():
+    """Common yt-dlp options"""
+    opts = {
         "format": "ba/b",
         "quiet": True,
         "skip_download": True,
         "noplaylist": True,
         "no_check_certificates": True,
         "http_headers": HEADERS,
-        "extractor_args": {"youtube": {"player_client": [player_client]}},
+        "js_runtimes": {"nodejs": {}},
     }
-
     cookies_file = _get_cookies_file()
     if cookies_file:
-        ydl_opts["cookiefile"] = cookies_file
+        opts["cookiefile"] = cookies_file
+    return opts
 
-    with YoutubeDL(ydl_opts) as ydl:
+
+def _try_extract(video_id: str, player_client: str) -> str:
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    opts = _base_opts()
+    opts["extractor_args"] = {"youtube": {"player_client": [player_client]}}
+
+    with YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=False)
         return info["url"]
 
@@ -102,20 +117,11 @@ def get_audio_url(video_id: str) -> str:
             last_error = e
             continue
 
+    # Final attempt with no client restriction
     try:
         url = f"https://www.youtube.com/watch?v={video_id}"
-        ydl_opts = {
-            "format": "ba/b",
-            "quiet": True,
-            "skip_download": True,
-            "noplaylist": True,
-            "no_check_certificates": True,
-            "http_headers": HEADERS,
-        }
-        cookies_file = _get_cookies_file()
-        if cookies_file:
-            ydl_opts["cookiefile"] = cookies_file
-        with YoutubeDL(ydl_opts) as ydl:
+        opts = _base_opts()
+        with YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
             return info["url"]
     except Exception as e:
